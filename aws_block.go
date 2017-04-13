@@ -11,8 +11,8 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"golang.org/x/net/context"
 	"github.com/tomasen/realip"
+	"golang.org/x/net/context"
 )
 
 const (
@@ -42,22 +42,14 @@ type (
 		ipNets []*net.IPNet
 	}
 
-	Confirm func(w http.ResponseWriter, r *http.Request) bool
-
 	Config struct {
 		Interval time.Duration
 		Region   string
 		Service  string
-		Confirm  Confirm
 	}
 )
 
 func New(config *Config) *Blocker {
-	if config.Confirm == nil {
-		config.Confirm = func(w http.ResponseWriter, r *http.Request) bool {
-			return true
-		}
-	}
 	return &Blocker{
 		config: config,
 		ipNets: make([]*net.IPNet, 0),
@@ -155,28 +147,29 @@ func (c *Config) matches(region, service string) bool {
 	return false
 }
 
+func (b *Blocker) AWSRequest(r *http.Request) bool {
+	userIP := realip.RealIP(r)
+	ip := net.ParseIP(userIP)
+
+	var match bool
+
+	b.RLock()
+	defer b.RUnlock()
+
+	for _, net := range b.ipNets {
+		if match = net.Contains(ip); match {
+			break
+		}
+	}
+
+	return match
+}
+
 func (b *Blocker) Middleware(h http.Handler) http.Handler {
 	fn := func(w http.ResponseWriter, r *http.Request) {
-		userIP := realip.RealIP(r)
-		ip := net.ParseIP(userIP)
-
-		var block bool
-
-		b.RLock()
-		for _, net := range b.ipNets {
-			if block = net.Contains(ip); block {
-				break
-			}
-		}
-		b.RUnlock()
-
-		if block {
-			// provide a chance for caller to
-			// a) whitelist requests (e.g. allow certain IPs / user-agents)
-			// b) log that some request is being blocked / set the response
-			if block = b.config.Confirm(w, r); block {
-				return
-			}
+		if b.AWSRequest(r) {
+			http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+			return
 		}
 
 		h.ServeHTTP(w, r)
