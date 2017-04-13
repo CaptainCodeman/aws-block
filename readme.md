@@ -24,7 +24,7 @@ config := &awsblock.Config{
 Create a new blocker instance using an http client and the config:
 
 ```go
-blocker := New(http.DefaultClient, config)
+blocker := New(config)
 ```
 
 Start the updating service, pass in a cancellable-context if cancellation is required
@@ -34,7 +34,7 @@ or else just use `context.Background()`:
 ctx, cancel := context.WithCancel(context.Background())
 defer cancel()
 
-blocker.Start(ctx)
+blocker.Start(ctx, http.DefaultClient)
 ```
 
 Use the blocker middleware to block any traffic coming from AWS:

@@ -1,4 +1,4 @@
-package awsblock
+package main
 
 import (
 	"context"
@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"net/http"
+
+	"golang.org/x/net/context"
 )
 
 func main() {
@@ -23,8 +25,8 @@ func main() {
 		},
 	}
 
-	blocker := New(http.DefaultClient, config)
-	blocker.Start(ctx)
+	blocker := New(config)
+	blocker.Start(ctx, http.DefaultClient)
 
 	m := http.NewServeMux()
 

@@ -1,7 +1,6 @@
 package awsblock
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -12,6 +11,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"golang.org/x/net/context"
 	"github.com/tomasen/realip"
 )
 
@@ -38,7 +38,6 @@ type (
 
 	Blocker struct {
 		sync.RWMutex
-		client *http.Client
 		config *Config
 		ipNets []*net.IPNet
 	}
@@ -53,20 +52,19 @@ type (
 	}
 )
 
-func New(client *http.Client, config *Config) *Blocker {
+func New(config *Config) *Blocker {
 	if config.Confirm == nil {
 		config.Confirm = func(w http.ResponseWriter, r *http.Request) bool {
 			return true
 		}
 	}
 	return &Blocker{
-		client: client,
 		config: config,
 		ipNets: make([]*net.IPNet, 0),
 	}
 }
 
-func (b *Blocker) Start(ctx context.Context) {
+func (b *Blocker) Start(ctx context.Context, client *http.Client) {
 	ticker := time.NewTicker(b.config.Interval)
 
 	var (
@@ -79,7 +77,7 @@ func (b *Blocker) Start(ctx context.Context) {
 		defer fmt.Println("stopped")
 
 		for {
-			if ipranges, etag, err = b.Request(etag); err == nil {
+			if ipranges, etag, err = b.Request(client, etag); err == nil {
 				b.Update(ipranges)
 			}
 
@@ -93,7 +91,7 @@ func (b *Blocker) Start(ctx context.Context) {
 	}()
 }
 
-func (b *Blocker) Request(etag string) (*ipRanges, string, error) {
+func (b *Blocker) Request(client *http.Client, etag string) (*ipRanges, string, error) {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, "", err
@@ -103,7 +101,7 @@ func (b *Blocker) Request(etag string) (*ipRanges, string, error) {
 		req.Header.Set("If-None-Match", etag)
 	}
 
-	res, err := b.client.Do(req)
+	res, err := client.Do(req)
 	if err != nil {
 		return nil, "", err
 	}
